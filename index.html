@@ -28,15 +28,96 @@
 <div class="modal-backdrop" id="partialPaymentModal"><form class="modal" onsubmit="savePartialPayment(event)"><h2>Record partial payback</h2><p id="partialPaymentInfo" style="color:var(--muted);margin-top:0"></p><label class="field">Amount paid<input id="partialPaymentAmount" type="number" min="0.01" step="0.01" required></label><div class="actions"><button class="button secondary" type="button" onclick="closeModal('partialPaymentModal')">Cancel</button><button class="button" type="submit">Save payback</button></div></form></div>
 <script>
 const currencies={MYR:{name:'Malaysian Ringgit',rate:1},USD:{name:'US Dollar',rate:4.68},SGD:{name:'Singapore Dollar',rate:3.47},JPY:{name:'Japanese Yen',rate:.0315},EUR:{name:'Euro',rate:5.12},THB:{name:'Thai Baht',rate:.132},IDR:{name:'Indonesian Rupiah',rate:.00029}};
+const currencyPrecision={IDR:0,JPY:0,VND:0,KRW:0};
+const getCurrencyPrecision=(code)=>Number.isInteger(currencyPrecision[code])?currencyPrecision[code]:2;
+const getCurrencyStep=(code)=>getCurrencyPrecision(code)===0?'1':'0.01';
 let payments=[],splitOpen=false,editingPaymentIndex=null,reportCurrency='MYR';const money=v=>'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});const displayMoney=v=>reportCurrency+' '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
 function emptyRow(cols,message){return `<tr><td colspan="${cols}"><div class="empty">${message}</div></td></tr>`}
 function render(){const rows=payments.length?payments.map((p,index)=>{const val=p.amount*p.rate,split=p.splits?.length?`${p.splits.length} people`:'—';return `<tr><td>${p.date}</td><td><b>${p.trip}</b></td><td>${p.note}</td><td>${p.payer}</td><td>${p.currency} ${p.amount.toLocaleString()}</td><td>${p.rate}</td><td class="num">${money(val)}</td><td>${split}</td><td><button class="button secondary" type="button" onclick="editPayment(${index})">Edit</button></td></tr>`}).join(''):emptyRow(9,'No payments yet. Add your first income or expense record.');paymentRows.innerHTML=rows;recentPayments.innerHTML=payments.length?payments.slice(0,4).map(p=>`<tr><td><b>${p.trip}</b><br><span style="color:#697386;font-size:12px">${p.note}</span></td><td>${p.payer}</td><td>${p.currency} ${p.amount.toLocaleString()}</td><td class="num">${money(p.amount*p.rate)}</td><td><span class="chip ${p.type==='income'?'done':'warn'}">${p.type}</span></td></tr>`).join(''):emptyRow(5,'No payments recorded yet.');const income=payments.filter(p=>p.type==='income').reduce((a,p)=>a+p.amount*p.rate,0),expense=payments.filter(p=>p.type==='expense').reduce((a,p)=>a+p.amount*p.rate,0),displayRate=currencies[reportCurrency]?.rate||1;totalIncome.textContent=displayMoney(income/displayRate);totalExpense.textContent=displayMoney(expense/displayRate);monthIn.textContent=money(income);monthOut.textContent=money(expense);outstanding.textContent=money(income-expense);currencyList.innerHTML=Object.entries(currencies).map(([code,c])=>`<div class="currency"><div><b>${code} · ${c.name}</b><span>${code==='MYR'?'Base currency':'1 '+code+' = '+c.rate+' MYR'}</span></div><div class="rate">${code==='MYR'?'1.0000':c.rate.toFixed(4)}</div></div>`).join('');const options=Object.entries(currencies).map(([c,v])=>`<option value="${c}">${c} · ${v.name}</option>`).join('');pCurrency.innerHTML=options;rCurrency.innerHTML=options;reportCurrencySelect.innerHTML=options;reportCurrencySelect.value=reportCurrency;paymentCurrencySelect.innerHTML=options;paymentCurrencySelect.value=reportCurrency;renderDailyReport();}
 function switchView(id){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===id));pageTitle.textContent=document.querySelector(`[data-view="${id}"]`).textContent.trim();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 function setReportCurrency(){reportCurrency=reportCurrencySelect.value;render()}function setPaymentCurrency(){reportCurrency=paymentCurrencySelect.value;render()}function renderDailyReport(){if(!reportDate.value)reportDate.value=new Date().toISOString().slice(0,10);const date=reportDate.value,records=payments.filter(p=>p.type==='expense'&&p.date===date),people={},rate=currencies[reportCurrency]?.rate||1;const person=name=>people[name]||(people[name]={paid:0,share:0});let total=0,allocated=0;records.forEach(p=>{const value=p.amount*p.rate;total+=value;person(p.payer).paid+=value;(p.splits||[]).forEach(s=>{const share=s.amount*p.rate;person(s.name).share+=share;allocated+=share})});const peopleRows=Object.entries(people).sort((a,b)=>(b[1].paid-b[1].share)-(a[1].paid-a[1].share));dailyReportRows.innerHTML=peopleRows.length?peopleRows.map(([name,v])=>{const net=v.paid-v.share,status=Math.abs(net)<.01?'<span class="chip done">Settled</span>':net>0?'<span class="chip done">Should receive</span>':'<span class="chip warn">Owes</span>';return `<tr><td><b>${name}</b></td><td class="num">${displayMoney(v.paid/rate)}</td><td class="num">${displayMoney(v.share/rate)}</td><td class="num">${displayMoney(net/rate)}</td><td>${status}</td></tr>`}).join(''):emptyRow(5,'No expense records for this date yet.');dailyExpenseTotal.textContent=displayMoney(total/rate);dailyPeopleCount.textContent=peopleRows.length;dailyUnallocated.textContent=displayMoney((total-allocated)/rate);dailyRecordCount.textContent=records.length;}
-function openModal(id){document.querySelector('#'+id).classList.add('open');if(id==='rateModal'){rCurrency.value='USD';rRate.value=currencies.USD.rate}}function closeModal(id){document.querySelector('#'+id).classList.remove('open')}function syncRate(){pRate.value=currencies[pCurrency.value]?.rate||1;reportCurrency=pCurrency.value;if(reportCurrencySelect)reportCurrencySelect.value=reportCurrency;if(paymentCurrencySelect)paymentCurrencySelect.value=reportCurrency}rCurrency.onchange=e=>rRate.value=currencies[e.target.value].rate;
+function openModal(id){document.querySelector('#'+id).classList.add('open');if(id==='rateModal'){rCurrency.value='USD';rRate.value=currencies.USD.rate}}function closeModal(id){document.querySelector('#'+id).classList.remove('open')}function syncRate(){
+  pRate.value = currencies[pCurrency.value]?.rate || 1;
+  reportCurrency = pCurrency.value;
+  if (reportCurrencySelect) reportCurrencySelect.value = reportCurrency;
+  if (paymentCurrencySelect) paymentCurrencySelect.value = reportCurrency;
+  const precision = getCurrencyPrecision(pCurrency.value);
+  pAmount.step = getCurrencyStep(pCurrency.value);
+  pAmount.value = precision === 0 ? String(Math.round(Number(pAmount.value || 0))) : String(Number(pAmount.value || 0));
+}
+rCurrency.onchange=e=>rRate.value=currencies[e.target.value].rate;
 function startNewPayment(){editingPaymentIndex=null;paymentForm.reset();pDate.value=new Date().toISOString().slice(0,10);splitOpen=false;splitBox.classList.remove('open');splitCount.value=2;paymentModalTitle.textContent='Add payment';paymentSaveButton.textContent='Save payment';syncRate();openModal('paymentModal')}function editPayment(index){const p=payments[index];editingPaymentIndex=index;paymentForm.reset();pType.value=p.type;pDate.value=p.date;pTrip.value=p.trip;pNote.value=p.note;pPayer.value=p.payer;pCurrency.value=p.currency;pAmount.value=p.amount;pRate.value=p.rate;paymentModalTitle.textContent='Edit payment';paymentSaveButton.textContent='Save changes';splitOpen=(p.splits||[]).length>0;splitBox.classList.toggle('open',splitOpen);if(splitOpen){splitCount.value=p.splits.length;buildSplitRows(p.splits)}openModal('paymentModal')}
-function currentSplitRows(){return [...document.querySelectorAll('.split-row')].map(row=>({name:row.querySelector('.split-name').value,amount:row.querySelector('.split-amount').value}))}function toggleSplit(){splitOpen=!splitOpen;splitBox.classList.toggle('open',splitOpen);if(splitOpen)buildSplitRows([])}function buildSplitRows(existing=currentSplitRows()){const count=Math.max(2,Math.min(99,Math.floor(+splitCount.value||2))),total=+pAmount.value||0;splitCount.value=count;splitRows.innerHTML=Array.from({length:count},(_,i)=>`<div class="split-row"><input class="split-name" placeholder="Person ${i+1}" value="${existing[i]?.name||''}"><input class="split-amount" type="number" min="0" step="0.01" value="${existing[i]?.amount ?? (total/count).toFixed(2)}" oninput="updateSplitNote()" aria-label="Amount for person ${i+1}"></div>`).join('');updateSplitNote()}function updateSplitNote(){const total=+pAmount.value||0,assigned=currentSplitRows().reduce((sum,row)=>sum+(+row.amount||0),0),difference=total-assigned;splitNote.textContent=`Assigned: ${assigned.toFixed(2)} ${pCurrency.value}. ${Math.abs(difference)<.005?'Fully allocated.':`Remaining: ${difference.toFixed(2)} ${pCurrency.value}.`}`}function refreshSplit(){if(splitOpen){const names=currentSplitRows().map(row=>({name:row.name}));buildSplitRows(names)}}
-function toast(msg){notice.textContent=msg;notice.classList.add('show');setTimeout(()=>notice.classList.remove('show'),3200)}function addPayment(e){e.preventDefault();const splits=splitOpen?currentSplitRows().map(row=>({name:row.name||'Unnamed',amount:+row.amount||0})):[];const p={date:pDate.value,trip:pTrip.value,note:pNote.value,payer:pPayer.value,currency:pCurrency.value,amount:+pAmount.value,rate:+pRate.value,type:pType.value,splits};if(editingPaymentIndex===null){payments.unshift(p)}else{payments[editingPaymentIndex]=p}render();closeModal('paymentModal');toast(editingPaymentIndex===null?`Payment saved. ${splits.length?`Split saved for ${splits.length} people.`:''}`:'Payment updated.');editingPaymentIndex=null;switchView('payments')}function updateRate(e){e.preventDefault();const c=rCurrency.value;currencies[c].rate=+rRate.value;render();closeModal('rateModal');toast(`${c} rate updated. Past payments are unchanged.`)}
+function currentSplitRows(){return [...document.querySelectorAll('.split-row')].map(row=>({name:row.querySelector('.split-name').value,amount:row.querySelector('.split-amount').value}))}function toggleSplit(){splitOpen=!splitOpen;splitBox.classList.toggle('open',splitOpen);if(splitOpen)buildSplitRows([])}function buildSplitRows(existing = currentSplitRows()) {
+  const count = Math.max(2, Math.min(99, Math.floor(+splitCount.value || 2)));
+  const total = +pAmount.value || 0;
+  const precision = getCurrencyPrecision(pCurrency.value);
+  const step = getCurrencyStep(pCurrency.value);
+  const defaultShare = precision === 0 ? Math.floor(total / count) : (total / count).toFixed(precision);
+
+  splitCount.value = count;
+  splitRows.innerHTML = Array.from({ length: count }, (_, i) => `
+    <div class="split-row">
+      <input class="split-name" placeholder="Person ${i + 1}" value="${existing[i]?.name || ''}">
+      <input class="split-amount" type="number" min="0" step="${step}" value="${existing[i]?.amount ?? defaultShare}" oninput="updateSplitNote()" aria-label="Amount for person ${i + 1}">
+    </div>
+  `).join('');
+
+  updateSplitNote();
+}
+
+function updateSplitNote() {
+  const total = +pAmount.value || 0;
+  const precision = getCurrencyPrecision(pCurrency.value);
+  const assigned = currentSplitRows().reduce((sum, row) => sum + (+row.amount || 0), 0);
+  const difference = total - assigned;
+  const threshold = precision === 0 ? 0.5 : 0.005;
+
+  splitNote.textContent = `Assigned: ${assigned.toFixed(precision)} ${pCurrency.value}. ${Math.abs(difference) < threshold ? 'Fully allocated.' : `Remaining: ${difference.toFixed(precision)} ${pCurrency.value}.`}`;
+}function refreshSplit(){if(splitOpen){const names=currentSplitRows().map(row=>({name:row.name}));buildSplitRows(names)}}
+function toast(msg){notice.textContent=msg;notice.classList.add('show');setTimeout(()=>notice.classList.remove('show'),3200)}function addPayment(e) {
+  e.preventDefault();
+
+  const splits = splitOpen
+    ? currentSplitRows().map(row => ({ name: row.name || 'Unnamed', amount: +row.amount || 0 }))
+    : [];
+
+  if (splits.length) {
+    const total = +pAmount.value || 0;
+    const assigned = splits.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const diff = total - assigned;
+    const precision = getCurrencyPrecision(pCurrency.value);
+    const threshold = precision === 0 ? 0.5 : 0.005;
+
+    if (Math.abs(diff) >= threshold) {
+      const lastIndex = splits.length - 1;
+      splits[lastIndex].amount = +((splits[lastIndex].amount || 0) + diff).toFixed(precision);
+    }
+  }
+
+  const p = {
+    date: pDate.value,
+    trip: pTrip.value,
+    note: pNote.value,
+    payer: pPayer.value,
+    currency: pCurrency.value,
+    amount: +pAmount.value,
+    rate: +pRate.value,
+    type: pType.value,
+    splits
+  };
+
+  if (editingPaymentIndex === null) {
+    payments.unshift(p);
+  } else {
+    payments[editingPaymentIndex] = p;
+  }
+
+  render();
+  closeModal('paymentModal');
+  toast(editingPaymentIndex === null ? `Payment saved. ${splits.length ? `Split saved for ${splits.length} people.` : ''}` : 'Payment updated.');
+  editingPaymentIndex = null;
+  switchView('payments');
+}function updateRate(e){e.preventDefault();const c=rCurrency.value;currencies[c].rate=+rRate.value;render();closeModal('rateModal');toast(`${c} rate updated. Past payments are unchanged.`)}
 pRate.readOnly=true;pRate.title='Managed from Currencies → Update rate.';function updateRate(e){e.preventDefault();const c=rCurrency.value;currencies[c].rate=+rRate.value;if(pCurrency.value===c)syncRate();render();closeModal('rateModal');toast(`${c} rate updated. New payments will use this rate automatically.`)}
 let trips=[],settlements=[],partialTarget=null;
 document.getElementById('pTrip').outerHTML='<select id="pTrip" required onchange="loadTripMembers()"></select>';window.pTrip=document.getElementById('pTrip');
