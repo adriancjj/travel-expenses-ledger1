@@ -47,7 +47,7 @@ document.getElementById('pTrip').outerHTML='<select id="pTrip" required onchange
 document.querySelector('#trips .intro .button').onclick=()=>openModal('tripModal');document.querySelector('#reports table thead tr').insertAdjacentHTML('beforeend','<th>Action</th>');
 let editingTripId=null;
 function buildTripMemberRows(existing){
-  // Preserve existing names when resizing the member list.
+  // Preserve existing names when resizing the member list, but never reuse stale values for a new trip.
   const current = Array.isArray(existing)
     ? existing.map(n => (typeof n === 'string' ? n : (n.name || '')))
     : [...document.querySelectorAll('.trip-member-name')].map(x => x.value.trim());
@@ -63,11 +63,25 @@ function buildTripMemberRows(existing){
     </label>
   `).join('');
 }
-function startNewTrip(){editingTripId=null;tripForm.reset();tripMemberCount.value=2;buildTripMemberRows();document.querySelector('#tripModal h2').textContent='Create trip';openModal('tripModal')}
+function resetTripFormForNewTrip(){
+  editingTripId = null;
+  tripForm.reset();
+  tripMemberCount.value = 2;
+  tripMemberRows.innerHTML = '';
+  const defaultRows = Array.from({ length: 2 }, (_, i) => `
+    <label class="field" style="margin-top:9px">Traveller ${i + 1}
+      <input class="trip-member-name" placeholder="Full name" required value="">
+    </label>
+  `).join('');
+  tripMemberRows.innerHTML = defaultRows;
+  document.querySelector('#tripModal h2').textContent = 'Create trip';
+}
+function startNewTrip(){resetTripFormForNewTrip();openModal('tripModal')}
 function editTrip(id){
   const trip = trips.find(t => t.id === id);
   if (!trip) return;
   editingTripId = id;
+  tripForm.reset();
   tripName.value = trip.name;
   tripMemberCount.value = trip.members.length;
   // Populate rows with existing member names so resizing preserves them.
