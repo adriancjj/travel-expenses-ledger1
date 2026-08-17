@@ -36,16 +36,25 @@ function emptyRow(cols,message){return `<tr><td colspan="${cols}"><div class="em
 function render(){const rows=payments.length?payments.map((p,index)=>{const val=p.amount*p.rate,split=p.splits?.length?`${p.splits.length} people`:'—';return `<tr><td>${p.date}</td><td><b>${p.trip}</b></td><td>${p.note}</td><td>${p.payer}</td><td>${p.currency} ${p.amount.toLocaleString()}</td><td>${p.rate}</td><td class="num">${money(val)}</td><td>${split}</td><td><button class="button secondary" type="button" onclick="editPayment(${index})">Edit</button></td></tr>`}).join(''):emptyRow(9,'No payments yet. Add your first income or expense record.');paymentRows.innerHTML=rows;recentPayments.innerHTML=payments.length?payments.slice(0,4).map(p=>`<tr><td><b>${p.trip}</b><br><span style="color:#697386;font-size:12px">${p.note}</span></td><td>${p.payer}</td><td>${p.currency} ${p.amount.toLocaleString()}</td><td class="num">${money(p.amount*p.rate)}</td><td><span class="chip ${p.type==='income'?'done':'warn'}">${p.type}</span></td></tr>`).join(''):emptyRow(5,'No payments recorded yet.');const income=payments.filter(p=>p.type==='income').reduce((a,p)=>a+p.amount*p.rate,0),expense=payments.filter(p=>p.type==='expense').reduce((a,p)=>a+p.amount*p.rate,0),displayRate=currencies[reportCurrency]?.rate||1;totalIncome.textContent=displayMoney(income/displayRate);totalExpense.textContent=displayMoney(expense/displayRate);monthIn.textContent=money(income);monthOut.textContent=money(expense);outstanding.textContent=money(income-expense);currencyList.innerHTML=Object.entries(currencies).map(([code,c])=>`<div class="currency"><div><b>${code} · ${c.name}</b><span>${code==='MYR'?'Base currency':'1 '+code+' = '+c.rate+' MYR'}</span></div><div class="rate">${code==='MYR'?'1.0000':c.rate.toFixed(4)}</div></div>`).join('');const options=Object.entries(currencies).map(([c,v])=>`<option value="${c}">${c} · ${v.name}</option>`).join('');pCurrency.innerHTML=options;rCurrency.innerHTML=options;reportCurrencySelect.innerHTML=options;reportCurrencySelect.value=reportCurrency;paymentCurrencySelect.innerHTML=options;paymentCurrencySelect.value=reportCurrency;renderDailyReport();}
 function switchView(id){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===id));pageTitle.textContent=document.querySelector(`[data-view="${id}"]`).textContent.trim();window.scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 function setReportCurrency(){reportCurrency=reportCurrencySelect.value;render()}function setPaymentCurrency(){reportCurrency=paymentCurrencySelect.value;render()}function renderDailyReport(){if(!reportDate.value)reportDate.value=new Date().toISOString().slice(0,10);const date=reportDate.value,records=payments.filter(p=>p.type==='expense'&&p.date===date),people={},rate=currencies[reportCurrency]?.rate||1;const person=name=>people[name]||(people[name]={paid:0,share:0});let total=0,allocated=0;records.forEach(p=>{const value=p.amount*p.rate;total+=value;person(p.payer).paid+=value;(p.splits||[]).forEach(s=>{const share=s.amount*p.rate;person(s.name).share+=share;allocated+=share})});const peopleRows=Object.entries(people).sort((a,b)=>(b[1].paid-b[1].share)-(a[1].paid-a[1].share));dailyReportRows.innerHTML=peopleRows.length?peopleRows.map(([name,v])=>{const net=v.paid-v.share,status=Math.abs(net)<.01?'<span class="chip done">Settled</span>':net>0?'<span class="chip done">Should receive</span>':'<span class="chip warn">Owes</span>';return `<tr><td><b>${name}</b></td><td class="num">${displayMoney(v.paid/rate)}</td><td class="num">${displayMoney(v.share/rate)}</td><td class="num">${displayMoney(net/rate)}</td><td>${status}</td></tr>`}).join(''):emptyRow(5,'No expense records for this date yet.');dailyExpenseTotal.textContent=displayMoney(total/rate);dailyPeopleCount.textContent=peopleRows.length;dailyUnallocated.textContent=displayMoney((total-allocated)/rate);dailyRecordCount.textContent=records.length;}
-function openModal(id){document.querySelector('#'+id).classList.add('open');if(id==='rateModal'){rCurrency.value='USD';rRate.value=currencies.USD.rate}}function closeModal(id){document.querySelector('#'+id).classList.remove('open')}function syncRate(){pRate.value=currencies[pCurrency.value]?.rate||1;reportCurrency=pCurrency.value;if(reportCurrencySelect)reportCurrencySelect.value=reportCurrency;if(paymentCurrencySelect)paymentCurrencySelect.value=reportCurrency;const precision=getCurrencyPrecision(pCurrency.value);pAmount.step=getCurrencyStep(pCurrency.value);pAmount.min=precision===0?'0':'0.01';pAmount.value=(precision===0?Math.round(Number(pAmount.value||0)):Number(pAmount.value||0)).toString();}rCurrency.onchange=e=>rRate.value=currencies[e.target.value].rate;
+function openModal(id){document.querySelector('#'+id).classList.add('open');if(id==='rateModal'){rCurrency.value='USD';rRate.value=currencies.USD.rate}}function closeModal(id){document.querySelector('#'+id).classList.remove('open');if(id==='tripModal'){resetTripFormForNewTrip();}}function syncRate(){pRate.value=currencies[pCurrency.value]?.rate||1;reportCurrency=pCurrency.value;if(reportCurrencySelect)reportCurrencySelect.value=reportCurrency;if(paymentCurrencySelect)paymentCurrencySelect.value=reportCurrency;const precision=getCurrencyPrecision(pCurrency.value);pAmount.step=getCurrencyStep(pCurrency.value);pAmount.min=precision===0?'0':'0.01';pAmount.value=(precision===0?Math.round(Number(pAmount.value||0)):Number(pAmount.value||0)).toString();}rCurrency.onchange=e=>rRate.value=currencies[e.target.value].rate;
 pAmount.addEventListener('input',()=>{const precision=getCurrencyPrecision(pCurrency.value);if(precision===0){const raw=String(pAmount.value||'');if(raw.includes('.'))pAmount.value=String(Math.round(Number(raw)));pAmount.setCustomValidity('');}else{const num=Number(pAmount.value||0);const fixed=Number(num.toFixed(precision));if(num!==fixed)pAmount.value=String(fixed);pAmount.setCustomValidity('');}});pAmount.addEventListener('invalid',function(){const precision=getCurrencyPrecision(pCurrency.value);if(precision===0){const fixed=Math.round(Number(this.value||0));if(Number(this.value||0)!==fixed)this.value=String(fixed);this.setCustomValidity('');}});
-function startNewPayment(){editingPaymentIndex=null;paymentForm.reset();pDate.value=new Date().toISOString().slice(0,10);splitOpen=false;splitBox.classList.remove('open');splitCount.value=2;paymentModalTitle.textContent='Add payment';paymentSaveButton.textContent='Save payment';syncRate();openModal('paymentModal')}function editPayment(index){const p=payments[index];editingPaymentIndex=index;paymentForm.reset();pType.value=p.type;pDate.value=p.date;pTrip.value=p.trip;pNote.value=p.note;pPayer.value=p.payer;pCurrency.value=p.currency;pAmount.value=p.amount;pRate.value=p.rate;paymentModalTitle.textContent='Edit payment';paymentSaveButton.textContent='Save changes';splitOpen=(p.splits||[]).length>0;splitBox.classList.toggle('open',splitOpen);if(splitOpen){splitCount.value=p.splits.length;buildSplitRows(p.splits)}openModal('paymentModal')}
 function currentSplitRows(){return [...document.querySelectorAll('.split-row')].map(row=>({name:row.querySelector('.split-name').value,amount:row.querySelector('.split-amount').value}))}function toggleSplit(){splitOpen=!splitOpen;splitBox.classList.toggle('open',splitOpen);if(splitOpen)buildSplitRows([])}function buildSplitRows(existing=currentSplitRows()){const count=Math.max(2,Math.min(99,Math.floor(+splitCount.value||2)));const total=+pAmount.value||0;const precision=getCurrencyPrecision(pCurrency.value);const step=getCurrencyStep(pCurrency.value);const defaultShare=precision===0?Math.floor(total/count):(total/count).toFixed(precision);splitCount.value=count;splitRows.innerHTML=Array.from({length:count},(_,i)=>`<div class="split-row"><input class="split-name" placeholder="Person ${i+1}" value="${existing[i]?.name||''}"><input class="split-amount" type="number" min="0" step="${step}" value="${existing[i]?.amount ?? defaultShare}" oninput="updateSplitNote()" aria-label="Amount for person ${i+1}"></div>`).join('');updateSplitNote()}function updateSplitNote(){const total=+pAmount.value||0;const precision=getCurrencyPrecision(pCurrency.value);const assigned=currentSplitRows().reduce((sum,row)=>sum+(+row.amount||0),0);const difference=total-assigned;const threshold=precision===0?0.5:0.005;splitNote.textContent=`Assigned: ${assigned.toFixed(precision)} ${pCurrency.value}. ${Math.abs(difference)<threshold?'Fully allocated.':`Remaining: ${difference.toFixed(precision)} ${pCurrency.value}.`}`}function refreshSplit(){if(splitOpen){const names=currentSplitRows().map(row=>({name:row.name}));buildSplitRows(names)}}
-function toast(msg){notice.textContent=msg;notice.classList.add('show');setTimeout(()=>notice.classList.remove('show'),3200)}function addPayment(e){e.preventDefault();const splits=splitOpen?currentSplitRows().map(row=>({name:row.name||'Unnamed',amount:+row.amount||0})):[];if(splits.length){const total=+pAmount.value||0;const assigned=splits.reduce((sum,item)=>sum+(item.amount||0),0);const diff=total-assigned;const precision=getCurrencyPrecision(pCurrency.value);const threshold=precision===0?0.5:0.005;if(Math.abs(diff)>=threshold){const lastIndex=splits.length-1;splits[lastIndex].amount=Number(((splits[lastIndex].amount||0)+diff).toFixed(precision));}}const p={date:pDate.value,trip:pTrip.value,note:pNote.value,payer:pPayer.value,currency:pCurrency.value,amount:+pAmount.value,rate:+pRate.value,type:pType.value,splits};if(editingPaymentIndex===null){payments.unshift(p)}else{payments[editingPaymentIndex]=p}render();closeModal('paymentModal');toast(editingPaymentIndex===null?`Payment saved. ${splits.length?`Split saved for ${splits.length} people.`:''}`:'Payment updated.');editingPaymentIndex=null;switchView('payments')}function updateRate(e){e.preventDefault();const c=rCurrency.value;currencies[c].rate=+rRate.value;render();closeModal('rateModal');toast(`${c} rate updated. Past payments are unchanged.`)}
-pRate.readOnly=true;pRate.title='Managed from Currencies → Update rate.';function updateRate(e){e.preventDefault();const c=rCurrency.value;currencies[c].rate=+rRate.value;if(pCurrency.value===c)syncRate();render();closeModal('rateModal');toast(`${c} rate updated. New payments will use this rate automatically.`)}
+function toast(msg){notice.textContent=msg;notice.classList.add('show');setTimeout(()=>notice.classList.remove('show'),3200)}
+pRate.readOnly=true;pRate.title='Managed from Currencies → Update rate.';
 let trips=[],settlements=[],partialTarget=null;
 document.getElementById('pTrip').outerHTML='<select id="pTrip" required onchange="loadTripMembers()"></select>';window.pTrip=document.getElementById('pTrip');
-document.querySelector('#trips .intro .button').onclick=()=>openModal('tripModal');document.querySelector('#reports table thead tr').insertAdjacentHTML('beforeend','<th>Action</th>');
+document.querySelector('#trips .intro .button').onclick=()=>startNewTrip();document.querySelector('#reports table thead tr').insertAdjacentHTML('beforeend','<th>Action</th>');
 let editingTripId=null;
+function updateRate(e){
+  e.preventDefault();
+  const code = rCurrency.value;
+  if (!code || !Number.isFinite(Number(rRate.value))) return;
+  currencies[code] = { ...(currencies[code] || {}), rate: Number(rRate.value) };
+  saveToLocalStorage();
+  render();
+  closeModal('rateModal');
+  toast('Rate updated.');
+}
 function buildTripMemberRows(existing){
   // Preserve existing names when resizing the member list, but never reuse stale values for a new trip.
   const current = Array.isArray(existing)
@@ -66,17 +75,17 @@ function buildTripMemberRows(existing){
 function resetTripFormForNewTrip(){
   editingTripId = null;
   tripForm.reset();
+  tripName.value = '';
   tripMemberCount.value = 2;
   tripMemberRows.innerHTML = '';
-  const defaultRows = Array.from({ length: 2 }, (_, i) => `
+  tripMemberRows.innerHTML = Array.from({ length: 2 }, (_, i) => `
     <label class="field" style="margin-top:9px">Traveller ${i + 1}
       <input class="trip-member-name" placeholder="Full name" required value="">
     </label>
   `).join('');
-  tripMemberRows.innerHTML = defaultRows;
   document.querySelector('#tripModal h2').textContent = 'Create trip';
 }
-function startNewTrip(){resetTripFormForNewTrip();openModal('tripModal')}
+function startNewTrip(){resetTripFormForNewTrip();switchView('trips');openModal('tripModal')}
 function editTrip(id){
   const trip = trips.find(t => t.id === id);
   if (!trip) return;
@@ -84,14 +93,39 @@ function editTrip(id){
   tripForm.reset();
   tripName.value = trip.name;
   tripMemberCount.value = trip.members.length;
-  // Populate rows with existing member names so resizing preserves them.
+  tripMemberRows.innerHTML = '';
   buildTripMemberRows(trip.members);
   document.querySelector('#tripModal h2').textContent = 'Edit trip';
+  switchView('trips');
   openModal('tripModal');
 }
-function saveTrip(e){e.preventDefault();const members=[...document.querySelectorAll('.trip-member-name')].map(x=>x.value.trim()).filter(Boolean);if(!tripName.value.trim())return;const trip={id:editingTripId||Date.now().toString(),name:tripName.value.trim(),members};if(editingTripId!==null){trips[trips.findIndex(t=>t.id===editingTripId)]=trip}else{trips.push(trip)}renderTrips();populateTripSelect();closeModal('tripModal');tripForm.reset();editingTripId=null;toast('Trip saved.')}
+function saveTrip(e){
+  e.preventDefault();
+  const members=[...document.querySelectorAll('.trip-member-name')].map(x=>x.value.trim()).filter(Boolean);
+  if(!tripName.value.trim()) return;
+  const trip={id:editingTripId||Date.now().toString(),name:tripName.value.trim(),members};
+  if(editingTripId!==null){trips[trips.findIndex(t=>t.id===editingTripId)]=trip}else{trips.push(trip)}
+  renderTrips();
+  populateTripSelect();
+  closeModal('tripModal');
+  switchView('trips');
+  editingTripId=null;
+  toast('Trip saved.');
+}
 function deleteTrip(id){const trip=trips.find(t=>t.id===id);if(!trip||!confirm(`Delete "${trip.name}"? Existing payment records will be kept.`))return;trips=trips.filter(t=>t.id!==id);renderTrips();populateTripSelect();toast('Trip deleted.')}
-function renderTrips(){const panel=document.querySelector('#trips .panel');panel.innerHTML=trips.length?`<div class="table-wrap"><table><thead><tr><th>Trip</th><th>Travellers</th><th>Action</th></tr></thead><tbody>${trips.map(t=>`<tr><td><b>${t.name}</b></td><td>${t.members.join(', ')}</td><td><button class="button secondary" type="button" onclick="editTrip('${t.id}')">Edit</button> <button class="button secondary" type="button" onclick="deleteTrip('${t.id}')">Delete</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No trips yet. Create a trip and add its travellers to start tracking shared expenses.</div>'}
+function renderTrips(){
+  if (!trips.length) {
+    try {
+      const stored = localStorage.getItem('travelLedgerState');
+      if (stored) {
+        const state = JSON.parse(stored);
+        if (Array.isArray(state.trips) && state.trips.length) trips = state.trips;
+      }
+    } catch (e) {
+      console.warn('Trip state rehydrate failed during renderTrips', e);
+    }
+  }
+  const panel=document.querySelector('#trips .panel');panel.innerHTML=trips.length?`<div class="table-wrap"><table><thead><tr><th>Trip</th><th>Travellers</th><th>Action</th></tr></thead><tbody>${trips.map(t=>`<tr><td><b>${t.name}</b></td><td>${t.members.join(', ')}</td><td><button class="button secondary" type="button" onclick="editTrip('${t.id}')">Edit</button> <button class="button secondary" type="button" onclick="deleteTrip('${t.id}')">Delete</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No trips yet. Create a trip and add its travellers to start tracking shared expenses.</div>'}
 function populateTripSelect(selected=''){pTrip.innerHTML='<option value="">Select a trip</option>'+trips.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');pTrip.value=selected}
 function loadTripMembers(){const trip=trips.find(t=>t.id===pTrip.value);if(!trip)return;splitCount.value=trip.members.length}
 function startNewPayment(){editingPaymentIndex=null;paymentForm.reset();populateTripSelect();pDate.value=new Date().toISOString().slice(0,10);splitOpen=false;splitBox.classList.remove('open');splitCount.value=2;paymentModalTitle.textContent='Add payment';paymentSaveButton.textContent='Save payment';syncRate();openModal('paymentModal')}
@@ -114,11 +148,39 @@ const renderPaymentsBase=render;render=function(){renderPaymentsBase();addDelete
 document.querySelector('#reports table thead tr').innerHTML='<th>Person</th><th class="num">Paid</th><th class="num">Share</th><th class="num">Payback</th><th class="num">Net balance</th><th>Status</th><th>Action</th>';document.querySelector('#reports .panel').insertAdjacentHTML('afterend','<div class="panel" id="settlementPlanPanel" style="margin-top:18px"><h2>Who pays whom</h2><div class="table-wrap"><table><thead><tr><th>From</th><th>Pay to</th><th class="num">Amount</th></tr></thead><tbody id="settlementPlanRows"></tbody></table></div></div>');
 function renderSettlementPlan(){const date=reportDate.value,rate=currencies[reportCurrency]?.rate||1,balances={};const add=(name,value)=>balances[name]=(balances[name]||0)+value;payments.filter(p=>p.type==='expense'&&p.date===date).forEach(p=>{const value=p.amount*p.rate;add(p.payer,value);(p.splits||[]).forEach(s=>add(s.name,-s.amount*p.rate))});settlements.filter(s=>s.date===date).forEach(s=>add(s.name,s.amountMyr));const debtors=Object.entries(balances).filter(([,v])=>v<-.005).map(([name,v])=>({name,amount:-v})),creditors=Object.entries(balances).filter(([,v])=>v>.005).map(([name,v])=>({name,amount:v})),instructions=[];let d=0,c=0;while(d<debtors.length&&c<creditors.length){const amount=Math.min(debtors[d].amount,creditors[c].amount);instructions.push({from:debtors[d].name,to:creditors[c].name,amount});debtors[d].amount-=amount;creditors[c].amount-=amount;if(debtors[d].amount<.005)d++;if(creditors[c].amount<.005)c++}settlementPlanRows.innerHTML=instructions.length?instructions.map(x=>`<tr><td><b>${x.from}</b></td><td><b>${x.to}</b></td><td class="num">${displayMoney(x.amount/rate)}</td></tr>`).join(''):emptyRow(3,'Everyone is settled for this date.')}
 const dailyReportBase=renderDailyReport;renderDailyReport=function(){dailyReportBase();renderSettlementPlan()};
-buildTripMemberRows();renderTrips();render();
+buildTripMemberRows();
 
+// Persistence: localStorage (default) + Cloudflare D1 (optional cloud sync)
+function appState(){return {payments,trips,settlements,currencies,reportCurrency}}
+function saveToLocalStorage(){
+  try{
+    const state=appState();
+    localStorage.setItem('travelLedgerState',JSON.stringify(state));
+  }catch(e){console.warn('localStorage save failed',e)}
+}
+function loadFromLocalStorage(){
+  try{
+    const stored=localStorage.getItem('travelLedgerState');
+    if(!stored)return false;
+    const state=JSON.parse(stored);
+    if(state.payments&&Array.isArray(state.payments))payments=state.payments;
+    if(state.trips&&Array.isArray(state.trips))trips=state.trips;
+    if(state.settlements&&Array.isArray(state.settlements))settlements=state.settlements;
+    if(state.currencies&&typeof state.currencies==='object')Object.entries(state.currencies).forEach(([code,value])=>currencies[code]=value);
+    if(state.reportCurrency&&currencies[state.reportCurrency])reportCurrency=state.reportCurrency;
+    return true;
+  }catch(e){console.warn('localStorage load failed',e);return false}
+}
+
+if (loadFromLocalStorage()) {
+  renderTrips();
+  populateTripSelect();
+  populatePayerSelect();
+}
+render();
 // Cloudflare D1 persistence. The Pages Worker exposes a protected /api/state endpoint.
 let cloudSaveTimer=null,cloudReady=false,cloudSaving=false,cloudSaveQueued=false;
-function cloudState(){return {payments,trips,settlements,currencies,reportCurrency}}
+function cloudState(){return appState()}
 function cloudAuthHeaders(){const key=localStorage.getItem('travelLedgerAccessKey')||'';return {'Content-Type':'application/json',...(key?{Authorization:`Bearer ${key}`}:{})}}
 async function cloudRequest(method,body){
   let response=await fetch('/api/state',{method,headers:cloudAuthHeaders(),body:body?JSON.stringify(body):undefined,cache:'no-store'});
@@ -133,18 +195,25 @@ async function cloudRequest(method,body){
   return result;
 }
 async function loadCloudState(){
+  const localStateLoaded = loadFromLocalStorage();
   try{
     const result=await cloudRequest('GET');
     if(result.state){
-      payments=Array.isArray(result.state.payments)?result.state.payments:[];
-      trips=Array.isArray(result.state.trips)?result.state.trips:[];
-      settlements=Array.isArray(result.state.settlements)?result.state.settlements:[];
+      const nextPayments=Array.isArray(result.state.payments)?result.state.payments:[];
+      const nextTrips=Array.isArray(result.state.trips)?result.state.trips:[];
+      const nextSettlements=Array.isArray(result.state.settlements)?result.state.settlements:[];
+      if(nextPayments.length || nextTrips.length || nextSettlements.length){
+        payments=nextPayments;
+        trips=nextTrips;
+        settlements=nextSettlements;
+      }
       if(result.state.currencies&&typeof result.state.currencies==='object')Object.entries(result.state.currencies).forEach(([code,value])=>currencies[code]=value);
       if(result.state.reportCurrency&&currencies[result.state.reportCurrency])reportCurrency=result.state.reportCurrency;
+      saveToLocalStorage();
     }
     cloudReady=true;renderTrips();populateTripSelect();populatePayerSelect();render();
     toast(result.state?'Saved cloud data loaded.':'Cloud storage connected. New changes will be saved.');
-  }catch(error){console.error(error);toast(error.message||'Cloud storage could not be loaded.')}
+  }catch(error){console.error(error);if(localStateLoaded || loadFromLocalStorage()){cloudReady=true;renderTrips();populateTripSelect();populatePayerSelect();render();toast('Using local storage. Cloud sync unavailable.')}else{toast('Failed to load data. Please refresh.')}}
 }
 async function saveCloudState(){
   if(!cloudReady)return;
@@ -154,12 +223,14 @@ async function saveCloudState(){
   finally{cloudSaving=false;if(cloudSaveQueued){cloudSaveQueued=false;saveCloudState()}}
 }
 function scheduleCloudSave(){if(!cloudReady)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(saveCloudState,250)}
-const saveTripLocal=saveTrip;saveTrip=function(event){saveTripLocal(event);scheduleCloudSave()};
-const addPaymentLocal=addPayment;addPayment=function(event){addPaymentLocal(event);scheduleCloudSave()};
-const updateRateLocal=updateRate;updateRate=function(event){updateRateLocal(event);scheduleCloudSave()};
-const recordFullPaymentLocal=recordFullPayment;recordFullPayment=function(name,dueMyr){recordFullPaymentLocal(name,dueMyr);scheduleCloudSave()};
-const savePartialPaymentLocal=savePartialPayment;savePartialPayment=function(event){savePartialPaymentLocal(event);scheduleCloudSave()};
-const deletePaymentLocal=deletePayment;deletePayment=function(index){deletePaymentLocal(index);scheduleCloudSave()};
-loadCloudState();
+function scheduleAnySave(){saveToLocalStorage();scheduleCloudSave()}
+const saveTripLocal=saveTrip;saveTrip=function(event){saveTripLocal(event);scheduleAnySave()};
+const addPaymentLocal=addPayment;addPayment=function(event){addPaymentLocal(event);scheduleAnySave()};
+const updateRateLocal=updateRate;updateRate=function(event){updateRateLocal(event);scheduleAnySave()};
+const recordFullPaymentLocal=recordFullPayment;recordFullPayment=function(name,dueMyr){recordFullPaymentLocal(name,dueMyr);scheduleAnySave()};
+const savePartialPaymentLocal=savePartialPayment;savePartialPayment=function(event){savePartialPaymentLocal(event);scheduleAnySave()};
+const deletePaymentLocal=deletePayment;deletePayment=function(index){deletePaymentLocal(index);scheduleAnySave()};
+const deleteTripleLocal=deleteTrip;deleteTrip=function(id){deleteTripleLocal(id);scheduleAnySave()};
+loadFromLocalStorage();renderTrips();populateTripSelect();populatePayerSelect();render();loadCloudState();
 </script>
 </body></html>
